@@ -98,21 +98,23 @@ with st.sidebar:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# Histórico da Conversa e Inicialização
+# Histórico da Conversa
 # -----------------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": f"Olá! Sou seu tutor acadêmico. Como posso ajudar você no estudo de **{materia}** hoje?"}
     ]
 
-# 1. RENDERIZAR TODO O HISTÓRICO DE CHAT PRIMEIRO
+# Renderizar rigorosamente TODAS as mensagens salvas no histórico (User e Assistant)
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "audio" in msg:
             st.audio(msg["audio"], format="audio/mp3")
 
-# 2. ATALHOS RÁPIDOS DE SUGESTÕES (Abaixo do histórico)
+# -----------------------------------------------------------------------------
+# Atalhos Rápidos e Campo de Entrada
+# -----------------------------------------------------------------------------
 st.markdown("##### ⚡ Ações Rápidas:")
 sugestao = st.pills(
     label="Sugestões de comandos",
@@ -125,14 +127,13 @@ sugestao = st.pills(
     label_visibility="collapsed"
 )
 
-# 3. CAMPO DE ENTRADA DO USUÁRIO
 prompt_input = st.chat_input("Digite sua dúvida ou cole um problema para estudarmos...")
 
-# Definir qual entrada processar (Chat Input ou Botão de Sugestão)
+# Capturar input vindo do chat_input ou do st.pills
 prompt = prompt_input if prompt_input else sugestao
 
 # -----------------------------------------------------------------------------
-# Processamento da Pergunta e Geração da Resposta
+# Processamento de Entrada
 # -----------------------------------------------------------------------------
 if prompt:
     st.session_state.total_perguntas += 1
@@ -140,12 +141,10 @@ if prompt:
     if "entendi" in prompt.lower() or "consegui" in prompt.lower():
         st.balloons()
 
-    # Adicionar e exibir a pergunta do usuário
+    # 1. Adicionar e exibir a pergunta do usuário
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    # Preparar conteúdos para a API do Gemini
+    
+    # 2. Preparar conteúdos para a API do Gemini
     conteudos = []
     if imagem_upload:
         img_pil = Image.open(imagem_upload)
@@ -154,7 +153,7 @@ if prompt:
     prompt_com_contexto = f"[Área: {materia}] {prompt}"
     conteudos.append(prompt_com_contexto)
 
-    # Exibir a resposta do assistente IMEDIATAMENTE ABAIXO da pergunta do usuário
+    # 3. Gerar resposta
     with st.chat_message("assistant"):
         with st.status("🧠 SocratesAI está pensando...", expanded=True) as status:
             status.write("🔍 Lendo e interpretando o seu problema...")
@@ -175,10 +174,11 @@ if prompt:
                 status.write("💡 Formando orientação pedagógica socrática...")
                 status.update(label="Resposta gerada com sucesso!", state="complete", expanded=False)
                 
-                # Renderiza a resposta em texto
+                # Exibir texto na tela
                 st.markdown(texto_resposta)
 
-                # Gerar áudio
+                # Gerar áudio e salvar junto no histórico
+                audio_bytes = None
                 try:
                     tts = gTTS(text=texto_resposta[:300], lang='pt', slow=False)
                     fp = io.BytesIO()
@@ -186,9 +186,18 @@ if prompt:
                     fp.seek(0)
                     audio_bytes = fp.read()
                     st.audio(audio_bytes, format="audio/mp3")
-                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta, "audio": audio_bytes})
                 except Exception:
-                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+                    pass
+
+                # Guardar resposta da IA no histórico oficial do session_state
+                msg_assistant = {"role": "assistant", "content": texto_resposta}
+                if audio_bytes:
+                    msg_assistant["audio"] = audio_bytes
+                
+                st.session_state.messages.append(msg_assistant)
+                
+                # RECARREGAR A PÁGINA para fixar a resposta na ordem exata abaixo da pergunta
+                st.rerun()
 
             except Exception as ex:
                 status.update(label="Ocorreu um erro!", state="error")
