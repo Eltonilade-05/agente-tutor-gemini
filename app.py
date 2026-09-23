@@ -108,7 +108,7 @@ if prompt := st.chat_input("Digite sua dúvida ou cole um problema para estudarm
                 
                 # Chamada com o modelo padrão estável
                 resposta = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.6-flash",
                     contents=conteudos,
                     config=config
                 )
