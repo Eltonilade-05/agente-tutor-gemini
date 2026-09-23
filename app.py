@@ -31,7 +31,7 @@ DIRETRIZES OBRIGATÓRIAS:
 # -----------------------------------------------------------------------------
 # Configuração da Chave de API do Gemini
 # -----------------------------------------------------------------------------
-api_key = os.environ.get("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", None)
+api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
     st.error("🔑 Chave de API não encontrada! Adicione sua GEMINI_API_KEY nos Secrets do Streamlit Community Cloud.")
@@ -100,30 +100,21 @@ if prompt := st.chat_input("Digite sua dúvida ou cole um problema para estudarm
     # Gerar resposta via Gemini
     with st.chat_message("assistant"):
         with st.spinner("Analisando e preparando a orientação pedagógica..."):
-            # Lista de nomes de modelos caso um não esteja disponível na região/chave
-            modelos_para_tentar = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash"]
-            resposta_sucesso = False
-            
-            for nome_modelo in modelos_para_tentar:
-                try:
-                    config = types.GenerateContentConfig(
-                        system_instruction=SYSTEM_INSTRUCTION,
-                        temperature=0.3
-                    )
-                    
-                    resposta = client.models.generate_content(
-                        model=nome_modelo,
-                        contents=conteudos,
-                        config=config
-                    )
-                    
-                    texto_resposta = resposta.text
-                    st.markdown(texto_resposta)
-                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
-                    resposta_sucesso = True
-                    break  # Sai do loop se conseguir obter resposta
-                except Exception as ex:
-                    continue
-
-            if not resposta_sucesso:
-                st.error("Erro ao conectar com a API do Gemini. Verifique se a sua chave de API (GEMINI_API_KEY) está correta nos Secrets do Streamlit.")
+            try:
+                config = types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=0.3
+                )
+                
+                # Chamada com o modelo padrão estável
+                resposta = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=conteudos,
+                    config=config
+                )
+                
+                texto_resposta = resposta.text
+                st.markdown(texto_resposta)
+                st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+            except Exception as ex:
+                st.error(f"Erro na comunicação com a API: {ex}")
