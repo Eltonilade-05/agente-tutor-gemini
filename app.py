@@ -54,7 +54,7 @@ def abrir_modal_dicas():
     st.markdown("""
     - **Não peça respostas diretas:** O tutor foi projetado para te guiar a pensar sozinho!
     - **Envie fotos:** Caso tenha uma questão ou gráfico impresso, faça upload da imagem.
-    - **Mude o tom:** Use os botões de atalho abaixo do chat para pedir analogias ou simplificações.
+    - **Mude o tom:** Use os botões de atalho para pedir analogias ou simplificações.
     """)
     if st.button("Entendido! Let's study 🚀"):
         st.rerun()
@@ -75,13 +75,11 @@ with st.sidebar:
     st.markdown("### 📎 Anexo para Análise")
     imagem_upload = st.file_uploader("Envie foto de um exercício/gráfico:", type=["jpg", "jpeg", "png"])
     
-    # Exibir preview da imagem enviada na sidebar
     if imagem_upload:
         st.image(imagem_upload, caption="Imagem Anexada", use_container_width=True)
 
     st.divider()
 
-    # Painel com Métricas de Uso
     if "total_perguntas" not in st.session_state:
         st.session_state.total_perguntas = 0
 
@@ -100,23 +98,21 @@ with st.sidebar:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# Histórico da Conversa
+# Histórico da Conversa e Inicialização
 # -----------------------------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": f"Olá! Sou seu tutor acadêmico. Como posso ajudar você no estudo de **{materia}** hoje?"}
     ]
 
-# Renderizar mensagens anteriores
+# 1. RENDERIZAR TODO O HISTÓRICO DE CHAT PRIMEIRO
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if "audio" in msg:
             st.audio(msg["audio"], format="audio/mp3")
 
-# -----------------------------------------------------------------------------
-# Atalhos Rápidos de Sugestões (Pills)
-# -----------------------------------------------------------------------------
+# 2. ATALHOS RÁPIDOS DE SUGESTÕES (Abaixo do histórico)
 st.markdown("##### ⚡ Ações Rápidas:")
 sugestao = st.pills(
     label="Sugestões de comandos",
@@ -129,28 +125,27 @@ sugestao = st.pills(
     label_visibility="collapsed"
 )
 
-# -----------------------------------------------------------------------------
-# Processamento de Entrada e Resposta
-# -----------------------------------------------------------------------------
-prompt = st.chat_input("Digite sua dúvida ou cole um problema para estudarmos...")
+# 3. CAMPO DE ENTRADA DO USUÁRIO
+prompt_input = st.chat_input("Digite sua dúvida ou cole um problema para estudarmos...")
 
-# Se o usuário clicar em uma sugestão dos pills, usá-la como prompt
-if sugestao and not prompt:
-    prompt = sugestao
+# Definir qual entrada processar (Chat Input ou Botão de Sugestão)
+prompt = prompt_input if prompt_input else sugestao
 
+# -----------------------------------------------------------------------------
+# Processamento da Pergunta e Geração da Resposta
+# -----------------------------------------------------------------------------
 if prompt:
     st.session_state.total_perguntas += 1
     
-    # Animação celebrativa se o aluno entender a matéria
     if "entendi" in prompt.lower() or "consegui" in prompt.lower():
         st.balloons()
 
-    # Exibir mensagem do usuário
+    # Adicionar e exibir a pergunta do usuário
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Preparar dados para a API
+    # Preparar conteúdos para a API do Gemini
     conteudos = []
     if imagem_upload:
         img_pil = Image.open(imagem_upload)
@@ -159,7 +154,7 @@ if prompt:
     prompt_com_contexto = f"[Área: {materia}] {prompt}"
     conteudos.append(prompt_com_contexto)
 
-    # Resposta com Indicador de Status Passo a Passo
+    # Exibir a resposta do assistente IMEDIATAMENTE ABAIXO da pergunta do usuário
     with st.chat_message("assistant"):
         with st.status("🧠 SocratesAI está pensando...", expanded=True) as status:
             status.write("🔍 Lendo e interpretando o seu problema...")
@@ -180,10 +175,10 @@ if prompt:
                 status.write("💡 Formando orientação pedagógica socrática...")
                 status.update(label="Resposta gerada com sucesso!", state="complete", expanded=False)
                 
-                # Exibir texto
+                # Renderiza a resposta em texto
                 st.markdown(texto_resposta)
 
-                # Gerar áudio (Text-to-Speech) opcional
+                # Gerar áudio
                 try:
                     tts = gTTS(text=texto_resposta[:300], lang='pt', slow=False)
                     fp = io.BytesIO()
