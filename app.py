@@ -97,26 +97,33 @@ if prompt := st.chat_input("Digite sua dúvida ou cole um problema para estudarm
     prompt_com_contexto = f"[Área: {materia}] {prompt}"
     conteudos.append(prompt_com_contexto)
 
-    # Gerar resposta via Gemini 2.5 Flash
+    # Gerar resposta via Gemini
     with st.chat_message("assistant"):
         with st.spinner("Analisando e preparando a orientação pedagógica..."):
-            try:
-                config = types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    temperature=0.3
-                )
-                
-                resposta = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=conteudos,
-                    config=config
-                )
-                
-                texto_resposta = resposta.text
-                st.markdown(texto_resposta)
-                
-                # Salvar histórico
-                st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
-                
-            except Exception as e:
-                st.error(f"Erro ao conectar com o Gemini: {str(e)}")
+            # Lista de nomes de modelos caso um não esteja disponível na região/chave
+            modelos_para_tentar = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash"]
+            resposta_sucesso = False
+            
+            for nome_modelo in modelos_para_tentar:
+                try:
+                    config = types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        temperature=0.3
+                    )
+                    
+                    resposta = client.models.generate_content(
+                        model=nome_modelo,
+                        contents=conteudos,
+                        config=config
+                    )
+                    
+                    texto_resposta = resposta.text
+                    st.markdown(texto_resposta)
+                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+                    resposta_sucesso = True
+                    break  # Sai do loop se conseguir obter resposta
+                except Exception as ex:
+                    continue
+
+            if not resposta_sucesso:
+                st.error("Erro ao conectar com a API do Gemini. Verifique se a sua chave de API (GEMINI_API_KEY) está correta nos Secrets do Streamlit.")
