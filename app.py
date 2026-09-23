@@ -3,6 +3,8 @@ import streamlit as st
 from google import genai
 from google.genai import types
 from PIL import Image
+from gtts import gTTS
+import io
 
 # -----------------------------------------------------------------------------
 # Configuração Visual da Página Web
@@ -44,24 +46,57 @@ def get_gemini_client(key: str):
 client = get_gemini_client(api_key)
 
 # -----------------------------------------------------------------------------
-# Barra Lateral (Menu do Usuário)
+# Função de Pop-up Modal para Dicas de Estudo
+# -----------------------------------------------------------------------------
+@st.dialog("💡 Guia de Uso & Dicas Socráticas")
+def abrir_modal_dicas():
+    st.write("### Como aproveitar ao máximo seu tutor:")
+    st.markdown("""
+    - **Não peça respostas diretas:** O tutor foi projetado para te guiar a pensar sozinho!
+    - **Envie fotos:** Caso tenha uma questão ou gráfico impresso, faça upload da imagem.
+    - **Mude o tom:** Use os botões de atalho abaixo do chat para pedir analogias ou simplificações.
+    """)
+    if st.button("Entendido! Let's study 🚀"):
+        st.rerun()
+
+# -----------------------------------------------------------------------------
+# Barra Lateral (Menu do Usuário Dinâmico)
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.title("🎓 SocratesAI")
-    st.caption("Tutor Acadêmico com Inteligência Artificial")
+    st.caption("Tutor Acadêmico Interativo")
     st.divider()
 
     materia = st.selectbox(
-        "Área de Estudo:",
+        "📚 Área de Estudo:",
         ["Geral", "Matemática / Física", "Programação & Computação", "Química / Biologia", "Humanas & Literatura"]
     )
     
     st.markdown("### 📎 Anexo para Análise")
-    imagem_upload = st.file_uploader("Envie uma foto do exercício ou gráfico:", type=["jpg", "jpeg", "png"])
+    imagem_upload = st.file_uploader("Envie foto de um exercício/gráfico:", type=["jpg", "jpeg", "png"])
     
+    # Exibir preview da imagem enviada na sidebar
+    if imagem_upload:
+        st.image(imagem_upload, caption="Imagem Anexada", use_container_width=True)
+
     st.divider()
+
+    # Painel com Métricas de Uso
+    if "total_perguntas" not in st.session_state:
+        st.session_state.total_perguntas = 0
+
+    col1, col2 = st.columns(2)
+    col1.metric("Interações", st.session_state.total_perguntas)
+    col2.metric("Status", "Ativo 🟢")
+
+    st.divider()
+    
+    if st.button("💡 Dicas de Estudo", use_container_width=True):
+        abrir_modal_dicas()
+
     if st.button("🗑️ Limpar Conversa", use_container_width=True):
         st.session_state.messages = []
+        st.session_state.total_perguntas = 0
         st.rerun()
 
 # -----------------------------------------------------------------------------
@@ -76,20 +111,47 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        if "audio" in msg:
+            st.audio(msg["audio"], format="audio/mp3")
 
 # -----------------------------------------------------------------------------
-# Processamento de Entrada do Usuário e Resposta do Gemini
+# Atalhos Rápidos de Sugestões (Pills)
 # -----------------------------------------------------------------------------
-if prompt := st.chat_input("Digite sua dúvida ou cole um problema para estudarmos..."):
+st.markdown("##### ⚡ Ações Rápidas:")
+sugestao = st.pills(
+    label="Sugestões de comandos",
+    options=[
+        "Me dê uma dica sem responder",
+        "Explique como se eu tivesse 10 anos",
+        "Crie um exemplo prático do cotidiano",
+        "Entendi! Pode me passar um exercício parecido?"
+    ],
+    label_visibility="collapsed"
+)
+
+# -----------------------------------------------------------------------------
+# Processamento de Entrada e Resposta
+# -----------------------------------------------------------------------------
+prompt = st.chat_input("Digite sua dúvida ou cole um problema para estudarmos...")
+
+# Se o usuário clicar em uma sugestão dos pills, usá-la como prompt
+if sugestao and not prompt:
+    prompt = sugestao
+
+if prompt:
+    st.session_state.total_perguntas += 1
     
+    # Animação celebrativa se o aluno entender a matéria
+    if "entendi" in prompt.lower() or "consegui" in prompt.lower():
+        st.balloons()
+
     # Exibir mensagem do usuário
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Preparar dados para o Gemini
+    # Preparar dados para a API
     conteudos = []
-    
     if imagem_upload:
         img_pil = Image.open(imagem_upload)
         conteudos.append(img_pil)
@@ -97,16 +159,17 @@ if prompt := st.chat_input("Digite sua dúvida ou cole um problema para estudarm
     prompt_com_contexto = f"[Área: {materia}] {prompt}"
     conteudos.append(prompt_com_contexto)
 
-    # Gerar resposta via Gemini
+    # Resposta com Indicador de Status Passo a Passo
     with st.chat_message("assistant"):
-        with st.spinner("Analisando e preparando a orientação pedagógica..."):
+        with st.status("🧠 SocratesAI está pensando...", expanded=True) as status:
+            status.write("🔍 Lendo e interpretando o seu problema...")
+            
             try:
                 config = types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
                     temperature=0.3
                 )
                 
-                # Chamada com o modelo padrão estável
                 resposta = client.models.generate_content(
                     model="gemini-3.6-flash",
                     contents=conteudos,
@@ -114,7 +177,24 @@ if prompt := st.chat_input("Digite sua dúvida ou cole um problema para estudarm
                 )
                 
                 texto_resposta = resposta.text
+                status.write("💡 Formando orientação pedagógica socrática...")
+                status.update(label="Resposta gerada com sucesso!", state="complete", expanded=False)
+                
+                # Exibir texto
                 st.markdown(texto_resposta)
-                st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+
+                # Gerar áudio (Text-to-Speech) opcional
+                try:
+                    tts = gTTS(text=texto_resposta[:300], lang='pt', slow=False)
+                    fp = io.BytesIO()
+                    tts.write_to_fp(fp)
+                    fp.seek(0)
+                    audio_bytes = fp.read()
+                    st.audio(audio_bytes, format="audio/mp3")
+                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta, "audio": audio_bytes})
+                except Exception:
+                    st.session_state.messages.append({"role": "assistant", "content": texto_resposta})
+
             except Exception as ex:
+                status.update(label="Ocorreu um erro!", state="error")
                 st.error(f"Erro na comunicação com a API: {ex}")
